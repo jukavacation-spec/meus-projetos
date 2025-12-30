@@ -207,8 +207,15 @@ export function useConversations() {
         console.log('[Realtime] Subscription status:', status)
       })
 
+    // Fallback: polling leve a cada 30s caso realtime falhe
+    const fallbackInterval = setInterval(() => {
+      console.log('[Fallback] Checking for updates...')
+      fetchConversations(currentAllowedIds)
+    }, 30000)
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(fallbackInterval)
     }
   }, [initialized, fetchConversations, fetchSingleConversation])
 
