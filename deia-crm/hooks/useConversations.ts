@@ -73,8 +73,7 @@ export function useConversations() {
 
       if (error) throw error
 
-      // Dados já vêm atualizados do DB via webhooks do Chatwoot
-      // Não precisa mais buscar /api/chatwoot/conversations-live
+      // Dados vêm do DB via webhooks - sem polling para Chatwoot
       setConversations((dbConvs || []) as Conversation[])
     } catch (err) {
       setError(err as Error)
