@@ -2,20 +2,33 @@
 
 export const dynamic = 'force-dynamic'
 
+import { useState } from 'react'
 import { Header } from '@/components/layout/Header'
 import { useContacts } from '@/hooks/useContacts'
-import { formatDistanceToNow } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-import Link from 'next/link'
+import { useKanbanStages } from '@/hooks/useKanbanStages'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatPhone } from '@/lib/utils/phone'
 import { Users } from 'lucide-react'
+import { ContactModal } from '@/components/contact/ContactModal'
 
 export default function ContactsPage() {
-  const { contacts, isLoading } = useContacts()
+  const { contacts, isLoading, refetch } = useContacts()
+  const { stages } = useKanbanStages()
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  const getStageById = (stageId: string | null) => {
+    if (!stageId) return null
+    return stages.find(s => s.id === stageId)
+  }
+
+  const handleContactClick = (contactId: string) => {
+    setSelectedContactId(contactId)
+    setIsModalOpen(true)
+  }
 
   return (
     <>
@@ -38,44 +51,59 @@ export default function ContactsPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {contacts.map((contact) => (
-              <Link key={contact.id} href={`/contacts/${contact.id}`}>
-                <Card className="p-4 hover:bg-muted/50 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={contact.avatar_url || undefined} />
-                      <AvatarFallback>
-                        {contact.name?.charAt(0)?.toUpperCase() || '?'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {contact.name || 'Sem nome'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatPhone(contact.phone)}
-                      </p>
-                      {contact.tags && contact.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {contact.tags.slice(0, 2).map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                          {contact.tags.length > 2 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{contact.tags.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
+              <Card
+                key={contact.id}
+                className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => handleContactClick(contact.id)}
+              >
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={contact.avatar_url || undefined} />
+                    <AvatarFallback>
+                      {contact.name?.charAt(0)?.toUpperCase() || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">
+                      {contact.name || 'Sem nome'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatPhone(contact.phone)}
+                    </p>
+                    {contact.stage_id && (() => {
+                      const stage = getStageById(contact.stage_id)
+                      return stage ? (
+                        <Badge
+                          variant="secondary"
+                          className="text-xs mt-2"
+                          style={{
+                            backgroundColor: stage.color + '20',
+                            color: stage.color,
+                            borderColor: stage.color
+                          }}
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full mr-1"
+                            style={{ backgroundColor: stage.color }}
+                          />
+                          {stage.name}
+                        </Badge>
+                      ) : null
+                    })()}
                   </div>
-                </Card>
-              </Link>
+                </div>
+              </Card>
             ))}
           </div>
         )}
       </div>
+
+      <ContactModal
+        contactId={selectedContactId}
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onContactUpdated={refetch}
+      />
     </>
   )
 }

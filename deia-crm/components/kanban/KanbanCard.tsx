@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Clock } from 'lucide-react'
@@ -17,10 +16,10 @@ type Contact = {
 
 type Conversation = {
   id: string
+  contact_id: string
   stage_id: string | null
   priority: string
   subject: string | null
-  tags: string[]
   last_activity_at: string
   contact?: Contact
 }
@@ -28,6 +27,7 @@ type Conversation = {
 interface KanbanCardProps {
   conversation: Conversation
   isDragging?: boolean
+  onClick?: (contactId: string) => void
 }
 
 const priorityColors: Record<string, string> = {
@@ -37,75 +37,64 @@ const priorityColors: Record<string, string> = {
   urgent: 'bg-red-100 text-red-700',
 }
 
-export function KanbanCard({ conversation, isDragging }: KanbanCardProps) {
+export function KanbanCard({ conversation, isDragging, onClick }: KanbanCardProps) {
   const contact = conversation.contact
 
+  const handleClick = () => {
+    if (onClick && contact?.id) {
+      onClick(contact.id)
+    }
+  }
+
   return (
-    <Link href={`/inbox/${conversation.id}`}>
-      <Card
-        className={cn(
-          'mb-2 cursor-pointer transition-shadow hover:shadow-md',
-          isDragging && 'shadow-lg rotate-2'
-        )}
-      >
-        <CardContent className="p-3">
-          {/* Contact info */}
-          <div className="flex items-start gap-3 mb-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={contact?.avatar_url || undefined} />
-              <AvatarFallback className="text-xs">
-                {contact?.name?.charAt(0)?.toUpperCase() || '?'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">
-                {contact?.name || 'Sem nome'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {contact?.phone ? formatPhone(contact.phone) : 'Sem telefone'}
-              </p>
-            </div>
-          </div>
-
-          {/* Subject */}
-          {conversation.subject && (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-              {conversation.subject}
+    <Card
+      onClick={handleClick}
+      className={cn(
+        'mb-2 cursor-grab active:cursor-grabbing hover:shadow-md select-none',
+        isDragging && 'shadow-xl rotate-1 ring-2 ring-primary/50 opacity-95'
+      )}
+    >
+      <CardContent className="p-3">
+        {/* Contact info */}
+        <div className="flex items-start gap-3 mb-3">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={contact?.avatar_url || undefined} />
+            <AvatarFallback className="text-xs">
+              {contact?.name?.charAt(0)?.toUpperCase() || '?'}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {contact?.name || 'Sem nome'}
             </p>
-          )}
-
-          {/* Tags */}
-          {conversation.tags && conversation.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-3">
-              {conversation.tags.slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-              {conversation.tags.length > 3 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{conversation.tags.length - 3}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {formatDistanceToNow(new Date(conversation.last_activity_at), {
-                addSuffix: true,
-                locale: ptBR,
-              })}
-            </div>
-
-            <Badge className={cn('text-xs', priorityColors[conversation.priority] || priorityColors.normal)}>
-              {conversation.priority}
-            </Badge>
+            <p className="text-xs text-muted-foreground">
+              {contact?.phone ? formatPhone(contact.phone) : 'Sem telefone'}
+            </p>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+
+        {/* Subject */}
+        {conversation.subject && (
+          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+            {conversation.subject}
+          </p>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatDistanceToNow(new Date(conversation.last_activity_at), {
+              addSuffix: true,
+              locale: ptBR,
+            })}
+          </div>
+
+          <Badge className={cn('text-xs', priorityColors[conversation.priority] || priorityColors.normal)}>
+            {conversation.priority}
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

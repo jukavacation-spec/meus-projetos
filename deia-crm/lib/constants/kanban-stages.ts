@@ -71,6 +71,21 @@ export const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgente', color: '#ef4444' },
 ]
 
+// Colunas para agrupamento por prioridade
+export const PRIORITY_COLUMNS = [
+  { id: 'urgent', name: 'Urgente', color: '#ef4444', position: 0 },
+  { id: 'high', name: 'Alta', color: '#f59e0b', position: 1 },
+  { id: 'normal', name: 'Normal', color: '#3b82f6', position: 2 },
+  { id: 'low', name: 'Baixa', color: '#6b7280', position: 3 },
+]
+
+// Opções de agrupamento do Kanban
+export const STACKED_BY_OPTIONS = [
+  { value: 'stage_id', label: 'Status', description: 'Agrupar por status' },
+  { value: 'priority', label: 'Prioridade', description: 'Agrupar por nivel de prioridade' },
+  { value: 'assigned_to', label: 'Responsavel', description: 'Agrupar por usuario responsavel' },
+]
+
 export const STATUS_OPTIONS = [
   { value: 'open', label: 'Aberto' },
   { value: 'pending', label: 'Pendente' },

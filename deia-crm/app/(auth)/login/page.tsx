@@ -34,6 +34,13 @@ export default function LoginPage() {
       return
     }
 
+    // Sincronizar status com Chatwoot (fire and forget)
+    fetch('/api/auth/sync-chatwoot-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'online' })
+    }).catch(() => {}) // Ignorar erros - não bloquear login
+
     router.push('/')
     router.refresh()
   }
@@ -41,10 +48,12 @@ export default function LoginPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xl font-bold">
-          D
-        </div>
-        <CardTitle className="text-2xl">DEIA CRM</CardTitle>
+        <img
+          src="/logo-icon.png"
+          alt="FalDesk"
+          className="mx-auto mb-4 h-24 w-24 object-contain dark:invert"
+        />
+        <CardTitle className="text-2xl">FalDesk</CardTitle>
         <CardDescription>Entre com sua conta para continuar</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

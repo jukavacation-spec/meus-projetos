@@ -1,39 +1,44 @@
 'use client'
 
-import { Bell, Search } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { useState } from 'react'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
+import { GlobalSearch, GlobalSearchButton } from '@/components/search/GlobalSearch'
 
 interface HeaderProps {
   title?: string
+  children?: React.ReactNode
 }
 
-export function Header({ title }: HeaderProps) {
-  return (
-    <header className="flex h-16 items-center justify-between border-b bg-card px-6">
-      <div className="flex items-center gap-4">
-        {title && (
-          <h1 className="text-xl font-semibold">{title}</h1>
-        )}
-      </div>
+export function Header({ title, children }: HeaderProps) {
+  const [searchOpen, setSearchOpen] = useState(false)
 
-      <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar..."
-            className="w-64 pl-9"
-          />
+  return (
+    <>
+      <header className="flex h-16 items-center justify-between border-b bg-card px-6">
+        <div className="flex items-center gap-4">
+          {title && (
+            <h1 className="text-xl font-semibold">{title}</h1>
+          )}
+          {children}
         </div>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />
-        </Button>
-      </div>
-    </header>
+        <div className="flex items-center gap-2">
+          {/* Global Search */}
+          <div className="hidden sm:block">
+            <GlobalSearchButton onClick={() => setSearchOpen(true)} />
+          </div>
+
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
+          {/* Notifications */}
+          <NotificationDropdown />
+        </div>
+      </header>
+
+      {/* Global Search Dialog */}
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+    </>
   )
 }

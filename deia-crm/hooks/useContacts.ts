@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Contact = {
@@ -11,7 +11,7 @@ type Contact = {
   name: string | null
   email: string | null
   avatar_url: string | null
-  tags: string[]
+  stage_id: string | null
   labels: string[]
   source: string
   created_at: string
@@ -23,24 +23,26 @@ export function useContacts() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
+  const fetchContacts = useCallback(async () => {
+    const supabase = createClient()
+    try {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100) // Limitar para performance
+
+      if (error) throw error
+      setContacts((data || []) as Contact[])
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const supabase = createClient()
-
-    async function fetchContacts() {
-      try {
-        const { data, error } = await supabase
-          .from('contacts')
-          .select('*')
-          .order('created_at', { ascending: false })
-
-        if (error) throw error
-        setContacts((data || []) as Contact[])
-      } catch (err) {
-        setError(err as Error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
 
     fetchContacts()
 
@@ -68,9 +70,9 @@ export function useContacts() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [fetchContacts])
 
-  return { contacts, isLoading, error }
+  return { contacts, isLoading, error, refetch: fetchContacts }
 }
 
 export function useContact(contactId: string) {

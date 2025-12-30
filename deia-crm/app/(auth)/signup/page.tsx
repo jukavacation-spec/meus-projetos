@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -16,7 +15,6 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -25,35 +23,57 @@ export default function SignupPage() {
 
     const supabase = createClient()
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
+    try {
+      // Criar usuario no Supabase Auth
+      // A criacao de Company e Chatwoot Account sera feita no onboarding
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
         },
-      },
-    })
+      })
 
-    if (error) {
-      setError(error.message)
+      if (authError) {
+        setError(authError.message)
+        setIsLoading(false)
+        return
+      }
+
+      if (!authData.user?.id) {
+        setError('Erro ao criar usuario')
+        setIsLoading(false)
+        return
+      }
+
+      setSuccess(true)
+    } catch {
+      setError('Erro ao criar conta. Tente novamente.')
+    } finally {
       setIsLoading(false)
-      return
     }
-
-    setSuccess(true)
-    setIsLoading(false)
   }
 
   if (success) {
     return (
       <Card>
         <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
           <CardTitle className="text-2xl">Verifique seu email</CardTitle>
-          <CardDescription>
-            Enviamos um link de confirmacao para {email}
+          <CardDescription className="mt-2">
+            Enviamos um link de confirmacao para <strong>{email}</strong>
           </CardDescription>
         </CardHeader>
+        <CardContent className="text-center text-sm text-muted-foreground">
+          <p>Clique no link no email para ativar sua conta.</p>
+          <p className="mt-2">Nao recebeu? Verifique a pasta de spam.</p>
+        </CardContent>
         <CardFooter>
           <Link href="/login" className="w-full">
             <Button variant="outline" className="w-full">
@@ -68,11 +88,13 @@ export default function SignupPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xl font-bold">
-          D
-        </div>
+        <img
+          src="/logo-icon.png"
+          alt="FalDesk"
+          className="mx-auto mb-4 h-24 w-24 object-contain dark:invert"
+        />
         <CardTitle className="text-2xl">Criar conta</CardTitle>
-        <CardDescription>Comece a usar o DEIA CRM gratuitamente</CardDescription>
+        <CardDescription>Comece a usar o FalDesk hoje mesmo</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -82,11 +104,11 @@ export default function SignupPage() {
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="name">Nome</Label>
+            <Label htmlFor="name">Seu nome</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Seu nome"
+              placeholder="Seu nome completo"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
