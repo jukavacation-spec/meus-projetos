@@ -591,13 +591,12 @@ export async function POST(request: NextRequest) {
             if (existingContact) {
               crmContactId = existingContact.id
             } else {
-              // Criar novo contato
-              const { data: newContact } = await supabase
+              // Criar novo contato (phone_normalized é coluna gerada)
+              const { data: newContact, error: contactError } = await supabase
                 .from('contacts')
                 .insert({
                   company_id: instance.company_id,
                   phone: normalizedPhone,
-                  phone_normalized: phoneNormalized,
                   name: contactName,
                   chatwoot_contact_id: contact.id,
                   source: 'whatsapp'
@@ -605,8 +604,12 @@ export async function POST(request: NextRequest) {
                 .select('id')
                 .single()
 
-              crmContactId = newContact?.id || null
-              console.log(`[UAZAPI Webhook] Created CRM contact ${crmContactId}`)
+              if (contactError) {
+                console.error(`[UAZAPI Webhook] Failed to create CRM contact:`, contactError)
+              } else {
+                crmContactId = newContact?.id || null
+                console.log(`[UAZAPI Webhook] Created CRM contact ${crmContactId}`)
+              }
             }
 
             // Criar conversa no CRM

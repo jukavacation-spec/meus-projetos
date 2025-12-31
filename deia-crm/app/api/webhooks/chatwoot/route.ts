@@ -173,7 +173,11 @@ export async function POST(req: NextRequest) {
         break
 
       case 'message_created':
-        await handleMessageCreated(supabase, companyId, conversation, message)
+        const msgResult = await handleMessageCreated(supabase, companyId, conversation, message)
+        if (!msgResult.success) {
+          await updateWebhookEventStatus(supabase, webhookEventId, 'failed', msgResult.error)
+          return NextResponse.json({ error: msgResult.error }, { status: 200 }) // 200 para Chatwoot não retentar
+        }
         break
 
       case 'webwidget_triggered':
@@ -501,23 +505,28 @@ async function handleMessageCreated(
   companyId: string,
   cwConversation: ChatwootConversation,
   message: ChatwootMessage
-) {
+): Promise<{ success: boolean; error?: string }> {
   console.log('[Webhook] message_created - conv:', cwConversation?.id, '| content:', message?.content?.substring(0, 50) || '[media]')
 
-  const { data: conversation } = await supabase
+  if (!cwConversation?.id) {
+    console.error('[Webhook] message_created - ERRO: chatwoot_conversation_id ausente no payload')
+    return { success: false, error: 'chatwoot_conversation_id missing in payload' }
+  }
+
+  const { data: conversation, error: fetchError } = await supabase
     .from('conversations')
     .select('id, contact_id, first_response_at, unread_count')
     .eq('company_id', companyId)
-    .eq('chatwoot_conversation_id', cwConversation?.id)
+    .eq('chatwoot_conversation_id', cwConversation.id)
     .single()
 
-  if (!conversation) {
-    console.log('[Webhook] message_created - Conversa não encontrada no CRM para chatwoot_conversation_id:', cwConversation?.id)
-    return
+  if (fetchError || !conversation) {
+    console.error('[Webhook] message_created - ERRO: Conversa não encontrada para chatwoot_conversation_id:', cwConversation.id, '| company_id:', companyId, '| fetchError:', fetchError)
+    return { success: false, error: `Conversation not found for chatwoot_id ${cwConversation.id}` }
   }
 
   // Ignorar mensagens privadas (notas internas)
-  if (message?.private) return
+  if (message?.private) return { success: true }
 
   // Atualizar conversa com última mensagem
   const updates: {
@@ -561,10 +570,17 @@ async function handleMessageCreated(
     updates.first_response_at = new Date().toISOString()
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from('conversations')
     .update(updates)
     .eq('id', conversation.id)
+
+  if (updateError) {
+    console.error('[Webhook] message_created - ERRO ao atualizar conversa:', updateError)
+    return { success: false, error: `Update failed: ${updateError.message}` }
+  }
+
+  console.log('[Webhook] message_created - SUCESSO: Conversa atualizada', conversation.id, '| last_message:', updates.last_message)
 
   // Timeline event (resumido, sem conteudo da mensagem)
   await supabase.from('timeline_events').insert({
@@ -577,6 +593,8 @@ async function handleMessageCreated(
       content_type: message?.content_type,
     },
   })
+
+  return { success: true }
 }
 
 async function handleContactUpdated(

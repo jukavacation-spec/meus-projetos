@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Contact = {
@@ -146,8 +146,12 @@ export function useConversations() {
     return data as Conversation | null
   }, [])
 
+  // Ref para controlar inicialização (evita re-render fechar conexão)
+  const initializedRef = useRef(false)
+
   useEffect(() => {
-    if (initialized) return
+    if (initializedRef.current) return
+    initializedRef.current = true
 
     const supabase = createClient()
     let currentAllowedIds: number[] | null = null
@@ -216,7 +220,8 @@ export function useConversations() {
       supabase.removeChannel(channel)
       clearInterval(fallbackInterval)
     }
-  }, [initialized, fetchConversations, fetchSingleConversation])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Wrapper para refetch que usa os IDs permitidos atuais
   const refetch = useCallback(async () => {
