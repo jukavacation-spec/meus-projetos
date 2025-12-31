@@ -63,16 +63,25 @@ async function broadcastConversationUpdate(
   type: 'created' | 'updated',
   conversationId: string
 ) {
+  const channelName = `conversations:${companyId}`
+  console.log(`[Broadcast] Starting broadcast to channel: ${channelName}`)
+
   try {
-    const channel = supabase.channel(`conversations:${companyId}`)
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { self: true }
+      }
+    })
 
     // Aguardar subscription antes de enviar (necessário para broadcast funcionar)
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
+        console.warn(`[Broadcast] Subscription timeout for ${channelName}`)
         reject(new Error('Broadcast subscription timeout'))
       }, 5000)
 
       channel.subscribe((status) => {
+        console.log(`[Broadcast] Channel ${channelName} status: ${status}`)
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeout)
           resolve()
@@ -84,19 +93,20 @@ async function broadcastConversationUpdate(
     })
 
     // Enviar broadcast após subscription confirmada
-    await channel.send({
+    const sendResult = await channel.send({
       type: 'broadcast',
       event: 'conversation_change',
       payload: { type, conversationId, timestamp: Date.now() }
     })
 
-    console.log(`[Broadcast] Sent ${type} for conversation ${conversationId}`)
+    console.log(`[Broadcast] Send result for ${conversationId}:`, sendResult)
 
     // Aguardar um pouco para garantir entrega antes de remover o canal
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise(resolve => setTimeout(resolve, 200))
     supabase.removeChannel(channel)
+    console.log(`[Broadcast] Channel ${channelName} removed`)
   } catch (err) {
-    console.warn('[Broadcast] Failed to send:', err)
+    console.error('[Broadcast] Failed to send:', err)
   }
 }
 
