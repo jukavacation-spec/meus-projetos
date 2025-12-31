@@ -8,6 +8,7 @@ type ChatwootContact = {
   name?: string
   email?: string
   avatar_url?: string
+  thumbnail?: string
 }
 
 type ChatwootConversation = {
@@ -503,7 +504,7 @@ async function handleConversationUpdated(
 async function handleMessageCreated(
   supabase: SupabaseClient,
   companyId: string,
-  cwConversation: ChatwootConversation,
+  cwConversation: ChatwootConversation & { meta?: { sender?: ChatwootContact } },
   message: ChatwootMessage
 ): Promise<{ success: boolean; error?: string }> {
   console.log('[Webhook] message_created - conv:', cwConversation?.id, '| content:', message?.content?.substring(0, 50) || '[media]')
@@ -513,16 +514,100 @@ async function handleMessageCreated(
     return { success: false, error: 'chatwoot_conversation_id missing in payload' }
   }
 
-  const { data: conversation, error: fetchError } = await supabase
+  let { data: conversation } = await supabase
     .from('conversations')
     .select('id, contact_id, first_response_at, unread_count')
     .eq('company_id', companyId)
     .eq('chatwoot_conversation_id', cwConversation.id)
     .single()
 
-  if (fetchError || !conversation) {
-    console.error('[Webhook] message_created - ERRO: Conversa não encontrada para chatwoot_conversation_id:', cwConversation.id, '| company_id:', companyId, '| fetchError:', fetchError)
-    return { success: false, error: `Conversation not found for chatwoot_id ${cwConversation.id}` }
+  // Se a conversa não existe no CRM, criar automaticamente
+  if (!conversation) {
+    console.log('[Webhook] message_created - Conversa não existe, criando automaticamente...')
+
+    // Buscar dados do contato do payload
+    const sender = cwConversation.meta?.sender
+    if (!sender?.phone_number) {
+      console.error('[Webhook] message_created - Não é possível criar conversa: contato sem telefone')
+      return { success: false, error: 'Cannot create conversation: contact has no phone number' }
+    }
+
+    const phone = normalizePhone(sender.phone_number)
+    const phoneNormalized = phone.replace(/\D/g, '')
+
+    // Buscar ou criar contato
+    let { data: contact } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('phone_normalized', phoneNormalized)
+      .single()
+
+    if (!contact) {
+      const { data: newContact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          company_id: companyId,
+          phone,
+          name: sender.name || null,
+          avatar_url: sender.thumbnail || null,
+          chatwoot_contact_id: sender.id,
+          source: 'whatsapp',
+        })
+        .select('id')
+        .single()
+
+      if (contactError || !newContact) {
+        console.error('[Webhook] message_created - Erro ao criar contato:', contactError)
+        return { success: false, error: 'Failed to create contact' }
+      }
+      contact = newContact
+      console.log('[Webhook] message_created - Contato criado:', contact.id)
+    }
+
+    // Buscar estágio inicial
+    const { data: initialStage } = await supabase
+      .from('kanban_stages')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('is_initial', true)
+      .single()
+
+    // Criar conversa
+    const { data: newConversation, error: convError } = await supabase
+      .from('conversations')
+      .insert({
+        company_id: companyId,
+        contact_id: contact.id,
+        chatwoot_conversation_id: cwConversation.id,
+        chatwoot_inbox_id: cwConversation.inbox_id,
+        stage_id: initialStage?.id || null,
+        status: 'open',
+      })
+      .select('id, contact_id, first_response_at, unread_count')
+      .single()
+
+    if (convError || !newConversation) {
+      console.error('[Webhook] message_created - Erro ao criar conversa:', convError)
+      return { success: false, error: 'Failed to create conversation' }
+    }
+
+    conversation = newConversation
+    console.log('[Webhook] message_created - Conversa criada automaticamente:', conversation.id)
+
+    // Registrar na timeline
+    await supabase.from('timeline_events').insert({
+      company_id: companyId,
+      contact_id: contact.id,
+      conversation_id: conversation.id,
+      event_type: 'conversation_started',
+      data: {
+        source: 'whatsapp',
+        chatwoot_conversation_id: cwConversation.id,
+        inbox_id: cwConversation.inbox_id,
+        auto_created: true,
+      },
+    })
   }
 
   // Ignorar mensagens privadas (notas internas)
