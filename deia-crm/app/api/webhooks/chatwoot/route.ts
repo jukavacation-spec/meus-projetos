@@ -184,13 +184,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload = await req.json()
-    const { event, account, conversation, message, contact } = payload
+    const { event, account, conversation, contact } = payload
+
+    // Chatwoot envia dados da mensagem no nível raiz, não em 'message'
+    // Construir objeto message a partir do payload
+    const message: ChatwootMessage = {
+      id: payload.id,
+      content: payload.content,
+      message_type: payload.message_type === 'incoming' ? 0 : payload.message_type === 'outgoing' ? 1 : payload.message_type,
+      content_type: payload.content_type,
+      private: payload.private,
+      sender: payload.sender,
+      attachments: payload.attachments,
+    }
 
     // Log para rastreamento
     console.log('[Chatwoot Webhook] Received from account:', account?.id)
 
     // Log para debug
-    console.log('[Chatwoot Webhook] Event:', event, '| Account:', account?.id, '| Conv:', conversation?.id)
+    console.log('[Chatwoot Webhook] Event:', event, '| Account:', account?.id, '| Conv:', conversation?.id, '| Content:', message?.content?.substring(0, 30))
 
     // Identificar empresa pelo account_id do Chatwoot
     const { data: companyData, error: companyError } = await supabase
