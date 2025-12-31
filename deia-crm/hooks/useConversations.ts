@@ -155,25 +155,84 @@ export function useConversations() {
 
     const supabase = createClient()
     let currentAllowedIds: number[] | null = null
+    let companyId: string | null = null
+    let broadcastChannel: ReturnType<typeof supabase.channel> | null = null
 
-    // Primeiro buscar inboxes permitidas, depois conversas
+    // Primeiro buscar inboxes permitidas e company_id, depois conversas
     const init = async () => {
       try {
-        const response = await fetch('/api/chatwoot/inboxes')
-        const data = await response.json()
-        if (data.inboxes) {
-          currentAllowedIds = data.inboxes.map((i: { id: number }) => i.id)
+        // Buscar inboxes e company_id em paralelo
+        const [inboxesRes, userRes] = await Promise.all([
+          fetch('/api/chatwoot/inboxes'),
+          supabase.auth.getUser()
+        ])
+
+        const inboxesData = await inboxesRes.json()
+        if (inboxesData.inboxes) {
+          currentAllowedIds = inboxesData.inboxes.map((i: { id: number }) => i.id)
           setAllowedInboxIds(currentAllowedIds)
         }
+
+        // Buscar company_id do usuário
+        if (userRes.data.user) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('company_id')
+            .eq('id', userRes.data.user.id)
+            .single()
+          companyId = userData?.company_id || null
+        }
       } catch (err) {
-        console.error('Error fetching allowed inboxes:', err)
+        console.error('Error in init:', err)
       }
       await fetchConversations(currentAllowedIds)
       setInitialized(true)
+
+      // Configurar broadcast channel para a empresa (funciona sem publication)
+      if (companyId) {
+        broadcastChannel = supabase
+          .channel(`conversations:${companyId}`)
+          .on('broadcast', { event: 'conversation_change' }, async (payload) => {
+            console.log('[Broadcast] Received:', payload.payload)
+            const { type, conversationId } = payload.payload as { type: string; conversationId: string }
+
+            if (type === 'created') {
+              // Nova conversa criada - buscar e adicionar à lista
+              const newConv = await fetchSingleConversation(conversationId)
+              if (newConv && (currentAllowedIds === null || (newConv.chatwoot_inbox_id && currentAllowedIds.includes(newConv.chatwoot_inbox_id)))) {
+                setConversations(prev => {
+                  // Evitar duplicatas
+                  if (prev.some(c => c.id === newConv.id)) return prev
+                  return [newConv, ...prev].slice(0, 100)
+                })
+              }
+            } else if (type === 'updated') {
+              // Conversa atualizada - buscar e atualizar na lista
+              const updatedConv = await fetchSingleConversation(conversationId)
+              if (updatedConv) {
+                setConversations(prev => {
+                  const exists = prev.some(c => c.id === updatedConv.id)
+                  if (!exists) {
+                    // Se não existe, adicionar (caso tenha sido criada em outra aba)
+                    return [updatedConv, ...prev].slice(0, 100)
+                  }
+                  // Atualiza e reordena por last_activity_at
+                  const updated = prev.map(c => c.id === updatedConv.id ? updatedConv : c)
+                  return updated.sort((a, b) =>
+                    new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
+                  )
+                })
+              }
+            }
+          })
+          .subscribe((status) => {
+            console.log('[Broadcast] Subscription status:', status)
+          })
+      }
     }
     init()
 
-    // Realtime subscription com updates incrementais
+    // Realtime subscription com updates incrementais (postgres_changes - precisa de publication)
     const channel = supabase
       .channel('conversations-changes')
       .on(
@@ -186,7 +245,10 @@ export function useConversations() {
             const newConv = await fetchSingleConversation(payload.new.id as string)
             // Só adiciona se a inbox da conversa for permitida
             if (newConv && (currentAllowedIds === null || (newConv.chatwoot_inbox_id && currentAllowedIds.includes(newConv.chatwoot_inbox_id)))) {
-              setConversations(prev => [newConv, ...prev].slice(0, 100))
+              setConversations(prev => {
+                if (prev.some(c => c.id === newConv.id)) return prev
+                return [newConv, ...prev].slice(0, 100)
+              })
             }
           } else if (payload.eventType === 'UPDATE') {
             // Buscar conversa atualizada com relations
@@ -218,6 +280,7 @@ export function useConversations() {
 
     return () => {
       supabase.removeChannel(channel)
+      if (broadcastChannel) supabase.removeChannel(broadcastChannel)
       clearInterval(fallbackInterval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

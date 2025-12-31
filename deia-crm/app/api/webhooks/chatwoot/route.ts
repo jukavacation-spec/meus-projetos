@@ -56,6 +56,27 @@ function getSupabaseAdmin() {
   })
 }
 
+// Broadcast para notificar frontend em tempo real
+async function broadcastConversationUpdate(
+  supabase: SupabaseClient,
+  companyId: string,
+  type: 'created' | 'updated',
+  conversationId: string
+) {
+  try {
+    const channel = supabase.channel(`conversations:${companyId}`)
+    await channel.send({
+      type: 'broadcast',
+      event: 'conversation_change',
+      payload: { type, conversationId, timestamp: Date.now() }
+    })
+    supabase.removeChannel(channel)
+    console.log(`[Broadcast] Sent ${type} for conversation ${conversationId}`)
+  } catch (err) {
+    console.warn('[Broadcast] Failed to send:', err)
+  }
+}
+
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   if (digits.length === 13 && digits.startsWith('55')) {
@@ -323,6 +344,9 @@ async function handleConversationCreated(
       inbox_id: cwConversation?.inbox_id,
     },
   })
+
+  // 5. Broadcast para frontend (tempo real)
+  await broadcastConversationUpdate(supabase, companyId, 'created', newConversation.id)
 }
 
 async function handleConversationStatusChanged(
@@ -608,6 +632,9 @@ async function handleMessageCreated(
         auto_created: true,
       },
     })
+
+    // Broadcast para frontend (nova conversa criada)
+    await broadcastConversationUpdate(supabase, companyId, 'created', conversation.id)
   }
 
   // Ignorar mensagens privadas (notas internas)
@@ -678,6 +705,9 @@ async function handleMessageCreated(
       content_type: message?.content_type,
     },
   })
+
+  // Broadcast para frontend (tempo real)
+  await broadcastConversationUpdate(supabase, companyId, 'updated', conversation.id)
 
   return { success: true }
 }
